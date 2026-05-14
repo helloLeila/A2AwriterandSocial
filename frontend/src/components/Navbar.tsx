@@ -1,9 +1,13 @@
 import { useState } from 'react';
-import type { NotificationItem } from '../types';
+import type { NotificationItem, ZhihuOAuthUser } from '../types';
 
 interface Props {
   notifications?: NotificationItem[];
   onNotificationClick?: () => void;
+  authUser?: ZhihuOAuthUser;
+  authLoading?: boolean;
+  onLogin?: () => void;
+  onLogout?: () => void;
 }
 
 const fallbackNotifications: NotificationItem[] = [
@@ -23,10 +27,20 @@ const fallbackNotifications: NotificationItem[] = [
   },
 ];
 
-export default function Navbar({ notifications = [], onNotificationClick }: Props) {
+export default function Navbar({
+  notifications = [],
+  onNotificationClick,
+  authUser,
+  authLoading = false,
+  onLogin,
+  onLogout,
+}: Props) {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
   const items = notifications.length > 0 ? notifications : fallbackNotifications;
   const unreadCount = notifications.length || 1;
+  const userName = authUser?.fullname || authUser?.hash_id || '我';
+  const avatar = authUser?.avatar_path;
 
   return (
     <nav className="zhihu-nav">
@@ -87,7 +101,39 @@ export default function Navbar({ notifications = [], onNotificationClick }: Prop
         </div>
         <button className="zhihu-nav-icon-btn">私信</button>
         <button className="zhihu-nav-icon-btn">创作中心</button>
-        <div className="zhihu-nav-avatar">我</div>
+        {authUser ? (
+          <div className="zhihu-account-wrap">
+            <button
+              className="zhihu-account-btn"
+              onClick={() => setShowAccount((v) => !v)}
+              title={String(userName)}
+            >
+              {avatar ? <img src={avatar} alt="" /> : <span>{String(userName).slice(0, 1)}</span>}
+            </button>
+            {showAccount && (
+              <div className="zhihu-account-popover">
+                <div className="zhihu-account-name">{String(userName)}</div>
+                {authUser.headline && <div className="zhihu-account-headline">{authUser.headline}</div>}
+                <button
+                  onClick={() => {
+                    setShowAccount(false);
+                    onLogout?.();
+                  }}
+                >
+                  退出登录
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            className="zhihu-login-btn"
+            onClick={onLogin}
+            disabled={authLoading}
+          >
+            {authLoading ? '登录检查中' : '知乎登录'}
+          </button>
+        )}
       </div>
     </nav>
   );
