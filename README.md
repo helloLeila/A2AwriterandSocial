@@ -160,6 +160,121 @@ docker push your-dockerhub-username/a2a-zhihu
 # ANTHROPIC_API_KEY=sk-xxx
 ```
 
+### Cloudflare 前端部署
+
+前端可以单独部署到 Cloudflare Pages 或 Workers Static Assets。注意不要把 `frontend/index.html` 当成静态站点直接发布；它会加载开发入口 `/src/main.tsx`，浏览器会报 `text/plain is not a valid JavaScript MIME type`。线上必须发布 `npm run build` 生成的 `frontend/dist`。
+
+**Cloudflare Pages 面板填写：**
+
+- Root directory：`frontend`
+- Build command：`npm ci && npm run build`
+- Build output directory：`dist`
+
+**Cloudflare Workers 静态资源部署：**
+
+```bash
+cd frontend
+npm ci
+npm run deploy:cloudflare
+```
+
+`frontend/wrangler.toml` 已配置为发布 `./dist`，并通过 `frontend/worker.js` 把 `/api/*` 同源代理到后端，避免 OAuth Cookie 和跨域问题。部署前需要在 Cloudflare Worker 变量里设置：
+
+- `API_BASE_URL`：阿里云后端地址，例如 `http://你的阿里云公网IP:18080`
+
+### 阿里云后端部署（配合 Cloudflare OAuth）
+
+这套方案让 OAuth 只看到 Cloudflare 的 HTTPS 地址，阿里云后端可以先用 HTTP 跑三天演示。
+
+1. 在阿里云安全组开放 `18080/tcp`。
+2. 把代码放到服务器后，复制环境模板：
+
+```bash
+cp backend/.env.aliyun.example backend/.env.aliyun
+```
+
+3. 编辑 `backend/.env.aliyun`，至少填入：
+
+```env
+ANTHROPIC_API_KEY=你的LLM密钥
+ANTHROPIC_BASE_URL=你的LLM兼容地址
+MODEL_NAME=你的模型名
+ZHIHU_OAUTH_APP_ID=你的知乎OAuth App ID
+ZHIHU_OAUTH_APP_KEY=你的知乎OAuth App Key
+ZHIHU_OAUTH_REDIRECT_URI=https://a2awriterandsocial2026.helloleila8h.workers.dev/api/auth/zhihu/callback
+CORS_ORIGINS=https://a2awriterandsocial2026.helloleila8h.workers.dev
+APP_ENV=production
+```
+
+4. 启动后端容器：
+
+```bash
+docker compose -f docker-compose.aliyun.yml up -d --build
+```
+
+5. 验证后端健康检查：
+
+```bash
+curl http://你的阿里云公网IP:18080/api/health
+```
+
+6. 在 Cloudflare Worker 变量里设置：
+
+```env
+API_BASE_URL=http://你的阿里云公网IP:18080
+```
+
+7. 知乎 OAuth 后台回调地址填写：
+
+```text
+https://a2awriterandsocial2026.helloleila8h.workers.dev/api/auth/zhihu/callback
+```
+
+### Zeabur 后端部署（无需 SSH）
+
+如果阿里云远程连接不稳定，可以把后端部署到 Zeabur Free。Zeabur 从 Git 仓库读取代码，使用根目录 `Dockerfile` 构建，容器内对外服务端口是 `80`。
+
+1. 把当前代码推到 GitHub 或 Gitee。
+2. 在 Zeabur 创建 Project，选择 Git Repository。
+3. 选择本仓库，部署方式使用根目录 `Dockerfile`。
+4. 在 Zeabur Service 的 Variables 中按 `backend/.env.zeabur.example` 填入变量，至少需要：
+
+```env
+APP_ENV=production
+CORS_ORIGINS=https://a2awriterandsocial2026.helloleila8h.workers.dev
+ANTHROPIC_API_KEY=你的LLM密钥
+ANTHROPIC_BASE_URL=你的LLM兼容地址
+MODEL_NAME=你的模型名
+ZHIHU_OAUTH_APP_ID=你的知乎OAuth App ID
+ZHIHU_OAUTH_APP_KEY=你的知乎OAuth App Key
+ZHIHU_OAUTH_REDIRECT_URI=https://a2awriterandsocial2026.helloleila8h.workers.dev/api/auth/zhihu/callback
+ZHIHU_OAUTH_SUCCESS_REDIRECT=/
+```
+
+5. Zeabur 部署完成后，在 Networking/Domain 中复制 HTTPS 域名，例如：
+
+```text
+https://your-service.zeabur.app
+```
+
+6. 回到 Cloudflare Worker，把变量设置为：
+
+```env
+API_BASE_URL=https://your-service.zeabur.app
+```
+
+7. 知乎 OAuth 后台回调地址仍然填写：
+
+```text
+https://a2awriterandsocial2026.helloleila8h.workers.dev/api/auth/zhihu/callback
+```
+
+8. 验证后端健康检查：
+
+```bash
+curl https://your-service.zeabur.app/api/health
+```
+
 ---
 
 ## 评委体验指南

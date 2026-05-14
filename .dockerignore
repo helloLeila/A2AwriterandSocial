@@ -2,11 +2,15 @@ __pycache__
 *.pyc
 *.pyo
 .env
-backend/.env
+backend/.env*
+!backend/.env.example
+!backend/.env.aliyun.example
+!backend/.env.zeabur.example
 .venv
 node_modules
 dist
 .DS_Store
+*.tar.gz
 .claude/
 openspec/
 .git/
