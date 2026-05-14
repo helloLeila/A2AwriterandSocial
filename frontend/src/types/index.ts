@@ -79,6 +79,20 @@ export interface NotificationItem {
   time: string;
 }
 
+export interface ZhihuOAuthUser {
+  uid?: number | string;
+  hash_id?: string;
+  fullname?: string;
+  gender?: string;
+  headline?: string;
+  description?: string;
+  avatar_path?: string;
+  url?: string;
+  email?: string;
+  phone_no?: string;
+  [key: string]: unknown;
+}
+
 export interface DemoSession {
   session_id: string;
   phase: DemoPhase;
