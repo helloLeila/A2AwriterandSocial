@@ -1,17 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDemo } from './hooks/useDemo';
+import { useZhihuAuth } from './hooks/useZhihuAuth';
 import Navbar from './components/Navbar';
 import QuestionHeader from './components/QuestionHeader';
 import Editor from './components/Editor';
 import CreativeAssistant from './components/CreativeAssistant';
-import QuestionModal from './components/QuestionModal';
 import AnswerDetailPage from './components/AnswerDetailPage';
 import type { NotificationItem } from './types';
 
+const DEFAULT_QUESTION_TITLE = '大学期间如何平衡学业、社交与个人成长？';
+const DEFAULT_QUESTION_DESC = '想写一篇对普通大学生有参考价值的回答：不代写完整答案，只生成写作框架和互动预演。';
+let hasBootstrappedDefaultDemo = false;
+
 export default function App() {
-  const [showQuestionModal, setShowQuestionModal] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [view, setView] = useState<'editor' | 'answer'>('editor');
+  const zhihuAuth = useZhihuAuth();
   const {
     state,
     isConnected,
@@ -23,11 +27,11 @@ export default function App() {
     setDraftContent,
   } = useDemo();
 
-  const handleStart = (title: string, desc: string) => {
-    setShowQuestionModal(false);
-    setView('editor');
-    startDemo(title, desc);
-  };
+  useEffect(() => {
+    if (hasBootstrappedDefaultDemo) return;
+    hasBootstrappedDefaultDemo = true;
+    startDemo(DEFAULT_QUESTION_TITLE, DEFAULT_QUESTION_DESC);
+  }, [startDemo]);
 
   const notifications: NotificationItem[] = [
     ...(state.publish_feedback?.asker_comment
@@ -54,16 +58,16 @@ export default function App() {
     setView('answer');
   };
 
-  if (showQuestionModal) {
-    return <QuestionModal onStart={handleStart} />;
-  }
-
   if (view === 'answer') {
     return (
       <AnswerDetailPage
         state={state}
         isLoading={isLoading}
         notifications={notifications}
+        authUser={zhihuAuth.user}
+        authLoading={zhihuAuth.loading}
+        onLogin={zhihuAuth.login}
+        onLogout={zhihuAuth.logout}
         onBackToEditor={() => setView('editor')}
         onSendComment={sendComment}
       />
@@ -108,7 +112,14 @@ export default function App() {
 
   return (
     <div>
-      <Navbar notifications={notifications} onNotificationClick={() => setView('answer')} />
+      <Navbar
+        notifications={notifications}
+        onNotificationClick={() => setView('answer')}
+        authUser={zhihuAuth.user}
+        authLoading={zhihuAuth.loading}
+        onLogin={zhihuAuth.login}
+        onLogout={zhihuAuth.logout}
+      />
       <div className="main-content">
         <QuestionHeader state={state} />
         <div className="editor-layout">
