@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react';
-import type { DemoSession, NotificationItem } from '../types';
+import type { DemoSession, NotificationItem, ZhihuOAuthUser } from '../types';
 import Navbar from './Navbar';
 
 interface Props {
   state: DemoSession;
   isLoading: boolean;
   notifications: NotificationItem[];
+  authUser?: ZhihuOAuthUser;
+  authLoading?: boolean;
+  onLogin?: () => void;
+  onLogout?: () => void;
   onBackToEditor: () => void;
   onSendComment: (reply: string) => void;
 }
@@ -14,6 +18,10 @@ export default function AnswerDetailPage({
   state,
   isLoading,
   notifications,
+  authUser,
+  authLoading,
+  onLogin,
+  onLogout,
   onBackToEditor,
   onSendComment,
 }: Props) {
@@ -36,7 +44,14 @@ export default function AnswerDetailPage({
 
   return (
     <div className="answer-detail-page">
-      <Navbar notifications={notifications} onNotificationClick={() => {}} />
+      <Navbar
+        notifications={notifications}
+        onNotificationClick={() => {}}
+        authUser={authUser}
+        authLoading={authLoading}
+        onLogin={onLogin}
+        onLogout={onLogout}
+      />
       <main className="answer-detail-shell">
         <section className="answer-question-card">
           <div className="question-topics">
