@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DemoSession, DemoPhase, StreamMessage, CommentTurn } from '../types';
+import type { DemoSession, DemoPhase, StreamMessage, StreamMessageType, CommentTurn } from '../types';
+import { mockSession } from '../mocks/demoData';
 
 const initialState: DemoSession = {
   session_id: '',
@@ -16,71 +17,45 @@ export function useDemo() {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startDemo = useCallback(async (questionTitle: string, questionDesc: string = '') => {
     setError(null);
     setIsLoading(true);
     setState({ ...initialState, question_title: questionTitle, question_desc: questionDesc });
 
-    try {
-      const res = await fetch('/api/demo/session/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_title: questionTitle, question_desc: questionDesc }),
-      });
+    // 模拟 SSE 事件流：逐步展示分析过程
+    setIsConnected(true);
 
-      if (!res.ok) {
-        setError('创建会话失败');
-        setIsLoading(false);
-        return;
+    const events: Array<{ type: string; delay: number; payload: Record<string, unknown> }> = [
+      { type: 'connected', delay: 200, payload: { message: '已连接' } },
+      { type: 'profile_fetching', delay: 600, payload: { message: '正在拉取答主数据...' } },
+      { type: 'answerer_profile_ready', delay: 1200, payload: { profile: mockSession.answerer_profile } },
+      { type: 'asker_profile_ready', delay: 1800, payload: { profile: mockSession.asker_profile } },
+      { type: 'research_ready', delay: 2400, payload: { research: mockSession.research } },
+      ...mockSession.debate_rounds.map((round, i) => ({
+        type: 'debate_round',
+        delay: 3000 + i * 600,
+        payload: { round, index: i },
+      })),
+      { type: 'strategy_ready', delay: 5000, payload: { strategy: mockSession.strategy } },
+    ];
+
+    events.forEach(({ type, delay, payload }) => {
+      const t = setTimeout(() => {
+        handleStreamMessage({ type: type as StreamMessageType, payload, timestamp: new Date().toISOString() });
+      }, delay);
+      if (type === 'strategy_ready') {
+        timerRef.current = t;
       }
+    });
 
-      const data = await res.json();
-      const sessionId = data.session_id;
-      setState((prev) => ({ ...prev, session_id: sessionId }));
-
-      const events = new EventSource(`/api/demo/session/${sessionId}/events`);
-      eventSourceRef.current = events;
-
-      events.onopen = () => {
-        setIsConnected(true);
-      };
-
-      events.onmessage = (event) => {
-        const msg: StreamMessage = JSON.parse(event.data);
-        handleStreamMessage(msg);
-      };
-
-      events.onerror = () => {
-        setError('SSE 事件流连接错误');
-        setIsConnected(false);
-        setIsLoading(false);
-        events.close();
-      };
-
-      [
-        'connected',
-        'profile_fetching',
-        'profiling',
-        'answerer_profile_ready',
-        'asker_profile_ready',
-        'research_ready',
-        'debate_round',
-        'strategy_ready',
-        'publish_feedback_ready',
-        'comment_turn_ready',
-        'error',
-      ].forEach((type) => {
-        events.addEventListener(type, (event) => {
-          const msg: StreamMessage = JSON.parse((event as MessageEvent).data);
-          handleStreamMessage(msg);
-        });
-      });
-    } catch (e) {
-      setError('连接失败: ' + String(e));
+    // 5.5秒后结束 loading
+    const loadingTimer = setTimeout(() => {
       setIsLoading(false);
-    }
+      setIsConnected(false);
+    }, 5500);
+    timerRef.current = loadingTimer;
   }, []);
 
   const handleStreamMessage = useCallback((msg: StreamMessage) => {
@@ -127,9 +102,6 @@ export function useDemo() {
         case 'strategy_ready':
           next.phase = 'strategy_ready';
           next.strategy = (payload.strategy as unknown as DemoSession['strategy']) || undefined;
-          setIsLoading(false);
-          eventSourceRef.current?.close();
-          setIsConnected(false);
           break;
 
         case 'publish_feedback_ready':
@@ -158,57 +130,38 @@ export function useDemo() {
   }, []);
 
   const publishDraft = useCallback(async (draftContent: string) => {
-    if (!state.session_id) return;
-
-    // 1. 立即更新UI，用户1秒内看到反馈
+    // 模拟发布：直接返回 mock 反馈
     setState((prev) => ({
       ...prev,
       phase: 'published',
       draft_content: draftContent,
     }));
 
-    // 2. 异步调用后端生成Agent反馈
     setIsLoading(true);
-    try {
-      const res = await fetch(`/api/demo/session/${state.session_id}/publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draft_content: draftContent }),
-      });
-      const data = await res.json();
-      if (data.feedback) {
-        setState((prev) => ({
-          ...prev,
-          phase: 'feedback_ready',
-          publish_feedback: data.feedback as DemoSession['publish_feedback'],
-        }));
-      }
-    } catch (e) {
-      setError('发布失败: ' + String(e));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [state.session_id]);
+    await new Promise((r) => setTimeout(r, 800));
+
+    setState((prev) => ({
+      ...prev,
+      phase: 'feedback_ready',
+      publish_feedback: mockSession.publish_feedback,
+    }));
+    setIsLoading(false);
+  }, []);
 
   const sendComment = useCallback(async (reply: string) => {
-    if (!state.session_id) return;
-    try {
-      const res = await fetch(`/api/demo/session/${state.session_id}/comment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answerer_reply: reply }),
-      });
-      const data = await res.json();
-      if (data.turn) {
-        setState((prev) => ({
-          ...prev,
-          comment_turns: [...prev.comment_turns, data.turn as CommentTurn],
-        }));
-      }
-    } catch (e) {
-      setError('评论失败: ' + String(e));
-    }
-  }, [state.session_id]);
+    // 模拟评论互动：返回 mock 回复
+    const turn = {
+      turn_number: (state.comment_turns?.length || 0) + 1,
+      answerer_reply: reply,
+      asker_feedback: mockSession.comment_turns[0]?.asker_feedback || '谢谢回复！我还有其他问题想问...',
+    };
+
+    setState((prev) => ({
+      ...prev,
+      comment_turns: [...prev.comment_turns, turn as CommentTurn],
+      phase: 'commenting',
+    }));
+  }, [state.comment_turns]);
 
   const setDraftContent = useCallback((content: string) => {
     setState((prev) => ({ ...prev, draft_content: content }));
@@ -216,8 +169,8 @@ export function useDemo() {
 
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
       }
     };
   }, []);

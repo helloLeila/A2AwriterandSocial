@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ZhihuOAuthUser } from '../types';
+import { mockZhihuUser } from '../mocks/demoData';
 
 interface AuthState {
   loggedIn: boolean;
@@ -14,30 +15,25 @@ export function useZhihuAuth() {
   });
 
   const refresh = useCallback(async () => {
-    try {
-      const res = await fetch('/api/auth/zhihu/me', {
-        credentials: 'same-origin',
-      });
-      const data = await res.json();
-      setAuth({
-        loggedIn: Boolean(data.logged_in),
-        user: data.user as ZhihuOAuthUser | undefined,
-        loading: false,
-      });
-    } catch {
-      setAuth({ loggedIn: false, loading: false });
-    }
+    // 静态模式：直接返回 mock 用户
+    await new Promise((r) => setTimeout(r, 300));
+    setAuth({
+      loggedIn: true,
+      user: mockZhihuUser as ZhihuOAuthUser,
+      loading: false,
+    });
   }, []);
 
   const login = useCallback(() => {
-    window.location.href = '/api/auth/zhihu/login';
+    // 静态模式：直接设为已登录
+    setAuth({
+      loggedIn: true,
+      user: mockZhihuUser as ZhihuOAuthUser,
+      loading: false,
+    });
   }, []);
 
   const logout = useCallback(async () => {
-    await fetch('/api/auth/zhihu/logout', {
-      method: 'POST',
-      credentials: 'same-origin',
-    });
     setAuth({ loggedIn: false, loading: false });
   }, []);
 
